@@ -17,6 +17,11 @@ from config.settings import (
     SPEED_COLORS
 )
 
+# Depth visualization colors (BGR)
+DEPTH_APPROACHING_COLOR = (255, 150, 50)   # Blue - approaching
+DEPTH_RECEDING_COLOR = (50, 50, 255)       # Red - receding
+DEPTH_OVERLAY_ALPHA = 0.3                   # Transparency level
+
 
 def get_speed_color(relative_speed: float) -> Tuple[int, int, int]:
     """Get color based on speed (green -> yellow -> red gradient).
@@ -49,6 +54,48 @@ def get_speed_color(relative_speed: float) -> Tuple[int, int, int]:
             int(mid[1] + t * (high[1] - mid[1])),
             int(mid[2] + t * (high[2] - mid[2]))
         )
+
+
+def draw_depth_overlay(
+    frame: np.ndarray,
+    tracked_obj: TrackedObject,
+    metrics: Optional[SpeedMetrics]
+) -> np.ndarray:
+    """Draw transparent color overlay inside bounding box based on direction.
+
+    Args:
+        frame: Image to draw on
+        tracked_obj: TrackedObject to draw
+        metrics: Speed metrics for direction
+
+    Returns:
+        Frame with depth overlay
+    """
+    if metrics is None:
+        return frame
+
+    # Skip stable objects
+    if metrics.direction == SpeedDirection.STABLE:
+        return frame
+
+    bbox = tracked_obj.detection.bbox
+    x1, y1, x2, y2 = bbox
+
+    # Choose color based on direction
+    if metrics.direction == SpeedDirection.APPROACHING:
+        color = DEPTH_APPROACHING_COLOR
+    else:
+        color = DEPTH_RECEDING_COLOR
+
+    # Scale alpha by speed intensity
+    alpha = DEPTH_OVERLAY_ALPHA * metrics.relative_speed
+
+    # Create overlay
+    overlay = frame.copy()
+    cv2.rectangle(overlay, (x1, y1), (x2, y2), color, -1)
+    frame = cv2.addWeighted(overlay, alpha, frame, 1 - alpha, 0)
+
+    return frame
 
 
 def draw_bounding_box(
@@ -369,8 +416,8 @@ def draw_instructions(frame: np.ndarray) -> np.ndarray:
 
     instructions = [
         "Click on object to track",
-        "Press 'q' to quit",
-        "Press 'c' to clear selection"
+        "Press 'd' to toggle depth view",
+        "Press 'c' to clear | 'q' to quit"
     ]
 
     y = h - 80
@@ -394,7 +441,8 @@ def render_frame(
     frame: np.ndarray,
     tracked_objects: Dict[int, TrackedObject],
     speed_metrics: Dict[int, SpeedMetrics],
-    fps: float
+    fps: float,
+    show_depth: bool = False
 ) -> np.ndarray:
     """Render complete frame with all overlays.
 
@@ -403,14 +451,21 @@ def render_frame(
         tracked_objects: Dictionary of tracked objects
         speed_metrics: Dictionary of speed metrics per object
         fps: Current FPS
+        show_depth: Whether to show depth visualization overlays
 
     Returns:
         Rendered frame with all overlays
     """
-    # Draw all bounding boxes
     primary_obj = None
     primary_metrics = None
 
+    # Draw depth overlays first (so they appear behind bounding boxes)
+    if show_depth:
+        for obj_id, tracked_obj in tracked_objects.items():
+            metrics = speed_metrics.get(obj_id)
+            frame = draw_depth_overlay(frame, tracked_obj, metrics)
+
+    # Draw all bounding boxes
     for obj_id, tracked_obj in tracked_objects.items():
         metrics = speed_metrics.get(obj_id)
         frame = draw_bounding_box(frame, tracked_obj, metrics)

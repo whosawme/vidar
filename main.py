@@ -52,6 +52,7 @@ class VidarApp:
 
         self.window_name = "Vidar - Speed Detection"
         self.running = False
+        self.show_depth = False  # Depth visualization toggle
 
     def _mouse_callback(self, event, x, y, flags, param):
         """Handle mouse clicks for object selection."""
@@ -76,6 +77,7 @@ class VidarApp:
 
         print("\nControls:")
         print("  - Click on object to track")
+        print("  - Press 'd' to toggle depth view")
         print("  - Press 'c' to clear selection")
         print("  - Press 'q' to quit")
         print("=" * 40)
@@ -115,7 +117,8 @@ class VidarApp:
                     frame,
                     tracked_objects,
                     speed_metrics,
-                    self.camera.get_fps()
+                    self.camera.get_fps(),
+                    show_depth=self.show_depth
                 )
 
                 # Show frame
@@ -131,6 +134,9 @@ class VidarApp:
                     print("Cleared selection")
                     self.tracker.clear()
                     self.speed_calc.reset()
+                elif key == ord('d'):
+                    self.show_depth = not self.show_depth
+                    print(f"Depth view: {'ON' if self.show_depth else 'OFF'}")
 
         except KeyboardInterrupt:
             print("\nInterrupted by user")
